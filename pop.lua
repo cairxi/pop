@@ -30,12 +30,14 @@ local config = settings.load(defaults)
 
 local entities = {}
 local announced = {}
+local dynamic_names = {}
+local despawning = {}
 local claim_tracking = {}
 
 local flash_window = function()
     local player = AshitaCore:GetMemoryManager():GetParty():GetMemberName(0)
     if player then
-        local hwnd = C.FindWindowA("FFXiClass", player)
+        local hwnd = C.FindWindowA('FFXiClass', player)
         if hwnd then
             C.FlashWindow(hwnd, true)
         end
@@ -74,15 +76,16 @@ end
 
 local add_tod = function(index, name)
     local now = os.time()
-    local date = os.date("%X %p", now)
-    local name = name or "(Unknown)"
+    local date = os.date('%X', now)
+    local name = name or '(Unknown)'
     print(chat.header(addon.name) + chat.message('[' .. index .. '] ') + chat.success(name) + chat.message( ' despawned at ') + chat.success(date))
 end
 
-local handle_despawn = function(index, name)
-    if announced[index] then
+local handle_unrender = function(index, name)
+    if announced[index] and despawning[index] then
         add_tod(index, name)
     end
+    despawning[index] = nil
     announced[index] = nil
 end
 
@@ -118,14 +121,12 @@ local populate_entity_names = function(zid, zsubid)
     return true
 end
 
-local dynamic_names = {}
-
 local fetch_name = function(index)
-    if index < 0x700 then
+    if index < 0x700 and entities[index] then
         return entities[index][4]
     end
 
-    return dynamic_names[index]
+    return dynamic_names[index] or '(Unknown)'
 end
 
 local handle_entity = function(data)
@@ -138,7 +139,7 @@ local handle_entity = function(data)
 
     if band(mask, 32) == 32 then
         local name = fetch_name(index)
-        handle_despawn(index, name)
+        handle_unrender(index, name)
         return
     end
 
@@ -159,6 +160,15 @@ local handle_entity = function(data)
     end
 end
 
+local handle_spawn_despawn = function(data)
+    local unpack = struct.unpack
+    local index = unpack('H', data, 0x11)
+    local kd = unpack('c4', data, 0x0D)
+    if kd == 'kesu' then
+        despawning[index] = true
+    end
+end
+
 ashita.events.register('packet_in', 'packet_in_cb', function (e)
     if (e.blocked) then
         return
@@ -170,13 +180,18 @@ ashita.events.register('packet_in', 'packet_in_cb', function (e)
         return
     end
 
+    -- Spawn/Despawn animation
+    if e.id == 0x038 then
+        handle_spawn_despawn(e.data_modified)
+    end
+
     -- Zone
     if e.id == 0x0A then
         announced = {}
         claim_tracking = {}
         dynamic_names = {}
         local zone = struct.unpack('H', e.data_modified, 0x31)
-        local subid = struct.unpack('H', e.data_modified, 0x9F);
+        local subid = struct.unpack('H', e.data_modified, 0x9F)
         populate_entity_names(zone, subid)
     end
 
