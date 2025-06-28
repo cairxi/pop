@@ -20,10 +20,12 @@ local defaults = {
         ids = {},
         names = {},
     },
+    tods = {},
     reminder = 60 * 5,
     flash = true,
     sound = true,
     ui = { true },
+    tod = { true },
 }
 
 local config = settings.load(defaults)
@@ -74,16 +76,17 @@ local handle_notify = function(index, name)
     print_pop_message(index, name)
 end
 
-local add_tod = function(index, name)
+local add_tod = function(index, id, name)
     local now = os.time()
     local date = os.date('%X', now)
     local name = name or '(Unknown)'
+    config.tods[id] = {index, name, now, date}
     print(chat.header(addon.name) + chat.message('[' .. index .. '] ') + chat.success(name) + chat.message( ' despawned at ') + chat.success(date))
 end
 
-local handle_unrender = function(index, name)
+local handle_unrender = function(index, id, name)
     if announced[index] and despawning[index] then
-        add_tod(index, name)
+        add_tod(index, id, name)
     end
     despawning[index] = nil
     announced[index] = nil
@@ -139,7 +142,7 @@ local handle_entity = function(data)
 
     if band(mask, 32) == 32 then
         local name = fetch_name(index)
-        handle_unrender(index, name)
+        handle_unrender(index, id, name)
         return
     end
 
@@ -209,12 +212,13 @@ end)
 
 local gui_flags = bit.bor(ImGuiWindowFlags_NoSavedSettings, ImGuiWindowFlags_NoFocusOnAppearing, ImGuiWindowFlags_NoScrollbar, ImGuiWindowFlags_NoScrollWithMouse)
 local visible = config.ui
+local tod_visible = config.tod
 local selected_color = { 0, 0.75, 0, 1.0 }
 local search_term = { '' }
 local entity_to_add = { '' }
 local show_selected = { false }
 
-ashita.events.register('d3d_present', 'present_cb', function ()
+local draw_main_window = function()
     if visible[1] then
         imgui.SetNextWindowBgAlpha(0.8)
         imgui.SetNextWindowSizeConstraints({ FLT_MIN, FLT_MIN, }, { 800, 800, })
@@ -300,6 +304,41 @@ ashita.events.register('d3d_present', 'present_cb', function ()
             imgui.End()
         end
     end
+end
+
+local format_time_difference = function(t)
+    local tdif = math.abs(t)
+    local hours   = string.format('%02d', math.floor(tdif / 3600))
+    local minutes = string.format('%02d', math.floor((tdif / 60) - (hours * 60)))
+    local seconds = string.format('%02d', math.floor(tdif % 60))
+    return '-'  .. hours .. ':' .. minutes .. ':' .. seconds
+end
+
+local draw_tod_window = function()
+    if tod_visible[1] then
+        local tods = config.tods
+        imgui.SetNextWindowBgAlpha(0.8)
+        imgui.SetNextWindowSizeConstraints({ FLT_MIN, FLT_MIN, }, { 400, 400, })
+        if(imgui.Begin('Recent TODs', tod_visible, gui_flags)) then
+            for k,v in pairs(tods) do
+                local dif = v[3] - os.time()
+                local foramtted = format_time_difference(dif)
+                if imgui.Button('-##remove-tod-' .. k) then
+                    tods[k] = nil
+                end
+                imgui.SameLine()
+                imgui.Text('[' .. v[1] .. '] '.. v[2] .. ' : ' .. v[4] .. ' |')
+                imgui.SameLine()
+                imgui.TextColored({ 0.75, 0.75, 0, 1.0 }, foramtted)
+            end
+            imgui.End()
+        end
+    end
+end
+
+ashita.events.register('d3d_present', 'present_cb', function ()
+    draw_main_window()
+    draw_tod_window()
 end)
 
 ashita.events.register('command', 'command_cb', function (e)
@@ -315,6 +354,10 @@ ashita.events.register('command', 'command_cb', function (e)
         return
     end
 
+    if args[2]:any('tod','t') then
+        tod_visible[1] = not tod_visible[1]
+    end
+
     if args[2]:any('sound','s') then
         config.sound = not config.sound
         local msg = config.sound and chat.success('[ON]') or chat.error('[OFF]')
@@ -326,6 +369,7 @@ ashita.events.register('command', 'command_cb', function (e)
         local msg = config.flash and chat.success('[ON]') or chat.error('[OFF]')
         print(chat.header(addon.name) + chat.message('Flash taskbar: ') + msg)
     end
+
 end)
 
 ashita.events.register('unload', 'unload_cb', settings.save)
