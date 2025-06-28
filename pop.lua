@@ -138,7 +138,7 @@ local handle_entity = function(data)
 
     if band(mask, 32) == 32 then
         local name = fetch_name(index)
-        handle_despawn(id, name)
+        handle_despawn(index, name)
         return
     end
 
