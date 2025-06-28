@@ -79,9 +79,9 @@ local add_tod = function(index, name)
     print(chat.header(addon.name) + chat.message('[' .. index .. '] ' .. name .. ' despawned at ') + chat.success(date))
 end
 
-local handle_despawn = function(index)
+local handle_despawn = function(index, name)
     if announced[index] then
-        add_tod(index)
+        add_tod(index, name)
     end
     announced[index] = nil
 end
@@ -153,9 +153,7 @@ local handle_entity = function(data)
 
     if (not claim_tracking[index] or claim_tracking[index] == 0) then
         local name = fetch_name(index)
-        if config.watch.ids[id] then
-            handle_notify(index, name)
-        elseif config.watch.names[name] then
+        if config.watch.ids[id] or config.watch.names[name] then
             handle_notify(index, name)
         end
     end
