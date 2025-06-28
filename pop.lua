@@ -88,6 +88,7 @@ local handle_unrender = function(index, id, name)
     if announced[index] and despawning[index] then
         add_tod(index, id, name)
     end
+    claim_tracking[index] = nil
     despawning[index] = nil
     announced[index] = nil
 end
@@ -166,9 +167,13 @@ end
 local handle_spawn_despawn = function(data)
     local unpack = struct.unpack
     local index = unpack('H', data, 0x11)
+    local id = unpack('I', data, 0x05)
     local kd = unpack('c4', data, 0x0D)
     if kd == 'kesu' then
         despawning[index] = true
+    elseif kd == 'deru' and config.watch.ids[id] then
+        local name = fetch_name(index)
+        handle_notify(index, name)
     end
 end
 
