@@ -151,15 +151,15 @@ local handle_entity = function(data)
         dynamic_names[index] = name
     end
 
-    if band(mask, 2) == 2 then
-        claim_tracking[index] = unpack('I', data, 0x2D)
-    end
-
     if (not claim_tracking[index] or claim_tracking[index] == 0) then
         local name = fetch_name(index)
         if config.watch.ids[id] or config.watch.names[name] then
             handle_notify(index, name)
         end
+    end
+    
+    if band(mask, 2) == 2 then
+        claim_tracking[index] = unpack('I', data, 0x2D)
     end
 end
 
