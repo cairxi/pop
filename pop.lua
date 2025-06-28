@@ -76,7 +76,7 @@ local add_tod = function(index, name)
     local now = os.time()
     local date = os.date("%X %p", now)
     local name = name or "(Unknown)"
-    print(chat.header(addon.name) + chat.message('[' .. index .. '] ' .. name .. ' despawned at ') + chat.success(date))
+    print(chat.header(addon.name) + chat.message('[' .. index .. '] ') + chat.success(name) + chat.message( ' despawned at ') + chat.success(date))
 end
 
 local handle_despawn = function(index, name)
@@ -197,6 +197,7 @@ local visible = config.ui
 local selected_color = { 0, 0.75, 0, 1.0 }
 local search_term = { '' }
 local entity_to_add = { '' }
+local show_selected = { false }
 
 ashita.events.register('d3d_present', 'present_cb', function ()
     if visible[1] then
@@ -211,6 +212,8 @@ ashita.events.register('d3d_present', 'present_cb', function ()
                     imgui.Text('Filter: ')
                     imgui.SameLine()
                     imgui.InputText('##search_term', search_term, 256)
+                    imgui.SameLine()
+                    imgui.Checkbox('Selected', show_selected)
                     imgui.EndGroup()
                     imgui.Dummy({0, .5})
                     imgui.SetNextWindowBgAlpha(0)
@@ -220,14 +223,15 @@ ashita.events.register('d3d_present', 'present_cb', function ()
 
                             local lower_name = v[5]
                             local term = search_term[1]
+                            local index = v[1]
+                            local id = v[2]
+                            local tag = v[3]
+                            local name = v[4]
+                            local checked = config.watch.ids[id] or false
 
-                            if term:len() < 1 or string.find(lower_name, term:lower()) then
+                            if (not show_selected[1] or (show_selected[1] and checked)) and 
+                                (term:len() < 1 or string.find(lower_name, term:lower())) then
 
-                                local index = v[1]
-                                local id = v[2]
-                                local tag = v[3]
-                                local name = v[4]
-                                local checked = config.watch.ids[id] or false
                                 local changed = imgui.Checkbox('##' .. tag, { checked })
                                 if changed then
                                     config.watch.ids[id] = not checked and true or nil
