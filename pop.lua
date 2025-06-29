@@ -377,6 +377,11 @@ ashita.events.register('command', 'command_cb', function (e)
 
 end)
 
-ashita.events.register('unload', 'unload_cb', settings.save)
+settings.register('settings', 'settings_update', function (s)
+    if s then
+        config = s
+    end
+    settings.save()
+end)
 
 populate_entity_names(AshitaCore:GetMemoryManager():GetParty():GetMemberZone(0), 0)
