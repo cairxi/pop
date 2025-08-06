@@ -2,18 +2,10 @@ addon.name = 'pop'
 addon.author = 'cair'
 addon.version = '1.0'
 
-local ffi = require('ffi')
 local imgui = require('imgui')
 local settings = require('settings')
-local dats = require('ffxi.dats')
 local chat = require('chat')
-
-ffi.cdef[[
-    bool FlashWindow(HWND hWnd, bool bInvert);
-    HWND FindWindowA(const char* lpClassName, const char* lpWindowName);
-]]
-
-local C = ffi.C
+local helpers = require('helpers')
 
 local defaults = {
     watch = {
@@ -36,25 +28,6 @@ local dynamic_names = {}
 local despawning = {}
 local claim_tracking = {}
 
-local flash_window = function()
-    local player = AshitaCore:GetMemoryManager():GetParty():GetMemberName(0)
-    if player then
-        local hwnd = C.FindWindowA('FFXiClass', player)
-        if hwnd then
-            C.FlashWindow(hwnd, true)
-        end
-    end
-end
-
-local play_pop_sound = function()
-    ashita.misc.play_sound(addon.path:append('\\sounds\\pop.wav'))
-end
-
-local print_pop_message = function(index, name)
-    local name = name or '(Unknown)'
-    print(chat.header(addon.name) + chat.message('['.. index .. '] ') + chat.success(name))
-end
-
 local watch_named_entity = function(name)
     config.watch.names[name] = true
 end
@@ -73,7 +46,7 @@ local handle_notify = function(index, name)
     announced[index] = now
     if config.flash then flash_window() end
     if config.sound then play_pop_sound() end
-    print_pop_message(index, name)
+    helpers.print_pop_message(index, name)
 end
 
 local add_tod = function(index, id, name)
@@ -91,38 +64,6 @@ local handle_unrender = function(index, id, name)
     claim_tracking[index] = nil
     despawning[index] = nil
     announced[index] = nil
-end
-
-local populate_entity_names = function(zid, zsubid)
-    entities = {}
-
-    local file = dats.get_zone_npclist(zid, zsubid)
-    if (file == nil or file:len() == 0) then
-        return false
-    end
-
-    local f = io.open(file, 'rb')
-    if (f == nil) then
-        return false
-    end
-
-    local size = f:seek('end')
-    f:seek('set', 0x20)
-
-    if (size == 0 or ((size - math.floor(size / 0x20) * 0x20) ~= 0)) then
-        f:close()
-        return false
-    end
-
-    for _ = 1, ((size / 0x20) - 0x01) do
-        local data = f:read(0x20)
-        local name, id = struct.unpack('c28L', data)
-        local namestr = ffi.string(name)
-        table.insert(entities, { bit.band(id, 0x0FFF), id, tostring(id), namestr, namestr:lower() })
-    end
-
-    f:close()
-    return true
 end
 
 local fetch_name = function(index)
@@ -200,7 +141,7 @@ ashita.events.register('packet_in', 'packet_in_cb', function (e)
         dynamic_names = {}
         local zone = struct.unpack('H', e.data_modified, 0x31)
         local subid = struct.unpack('H', e.data_modified, 0x9F)
-        populate_entity_names(zone, subid)
+        entities = helpers.populate_entity_names(zone, subid)
     end
 
 end)
@@ -311,14 +252,6 @@ local draw_main_window = function()
     end
 end
 
-local format_time_difference = function(t)
-    local tdif = math.abs(t)
-    local hours   = string.format('%02d', math.floor(tdif / 3600))
-    local minutes = string.format('%02d', math.floor((tdif / 60) - (hours * 60)))
-    local seconds = string.format('%02d', math.floor(tdif % 60))
-    return '-'  .. hours .. ':' .. minutes .. ':' .. seconds
-end
-
 local draw_tod_window = function()
     if tod_visible[1] then
         local tods = config.tods
@@ -327,7 +260,7 @@ local draw_tod_window = function()
         if(imgui.Begin('Recent TODs', tod_visible, gui_flags)) then
             for k,v in pairs(tods) do
                 local dif = v[3] - os.time()
-                local foramtted = format_time_difference(dif)
+                local foramtted = helpers.format_time_difference(dif)
                 if imgui.Button('-##remove-tod-' .. k) then
                     tods[k] = nil
                 end
@@ -384,4 +317,4 @@ settings.register('settings', 'settings_update', function (s)
     settings.save()
 end)
 
-populate_entity_names(AshitaCore:GetMemoryManager():GetParty():GetMemberZone(0), 0)
+entities = helpers.populate_entity_names(AshitaCore:GetMemoryManager():GetParty():GetMemberZone(0), 0)
