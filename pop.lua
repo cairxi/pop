@@ -44,8 +44,8 @@ local handle_notify = function(index, name)
         return
     end
     announced[index] = now
-    if config.flash then utils.flash_window() end
-    if config.sound then utils.play_pop_sound() end
+    if config.flash then helpers.flash_window() end
+    if config.sound then helpers.play_pop_sound() end
     helpers.print_pop_message(index, name)
 end
 
