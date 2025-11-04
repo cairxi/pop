@@ -184,13 +184,5 @@ settings.register('settings', 'settings_update', function (s)
     settings.save()
 end)
 
-local mgr = AshitaCore:GetInputManager()
-local kb = mgr:GetKeyboard()
-local xi = mgr:GetXInput()
-
-for k, v in pairs(getmetatable(kb)) do
-    print(k)
-end
-
 -- Initialize entities on load
 entities = helpers.populate_entity_names(AshitaCore:GetMemoryManager():GetParty():GetMemberZone(0), 0)
