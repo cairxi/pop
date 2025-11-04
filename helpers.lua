@@ -1,5 +1,6 @@
 local ffi = require('ffi')
 local dats = require('ffxi.dats')
+local chat = require('chat')
 
 ffi.cdef[[
     bool FlashWindow(HWND hWnd, bool bInvert);

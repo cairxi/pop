@@ -2,10 +2,11 @@ addon.name = 'pop'
 addon.author = 'cair'
 addon.version = '1.0'
 
-local imgui = require('imgui')
 local settings = require('settings')
 local chat = require('chat')
 local helpers = require('helpers')
+local ui = require('ui')
+local commands = require('commands')
 
 local defaults = {
     watch = {
@@ -22,12 +23,19 @@ local defaults = {
 
 local config = settings.load(defaults)
 
+-- State tracking
 local entities = {}
 local announced = {}
 local dynamic_names = {}
 local despawning = {}
 local claim_tracking = {}
+local target_index = 0
 
+-- UI visibility state
+local visible = config.ui
+local tod_visible = config.tod
+
+-- Watch/unwatch functions
 local watch_named_entity = function(name)
     config.watch.names[name] = true
 end
@@ -36,6 +44,7 @@ local unwatch_named_entity = function(name)
     config.watch.names[name] = nil
 end
 
+-- Core notification logic
 local handle_notify = function(index, name)
     local prev = announced[index] or 0
     local now = os.time()
@@ -55,6 +64,7 @@ local add_tod = function(index, id, name)
     local name = name or '(Unknown)'
     config.tods[id] = {index, name, now, date}
     print(chat.header(addon.name) + chat.message('[' .. index .. '] ') + chat.success(name) + chat.message( ' despawned at ') + chat.success(date))
+    settings.save()
 end
 
 local handle_unrender = function(index, id, name)
@@ -74,8 +84,8 @@ local fetch_name = function(index)
     return dynamic_names[index] or '(Unknown)'
 end
 
+-- Packet handlers
 local handle_entity = function(data)
-
     local unpack = struct.unpack
     local band = bit.band
     local index = unpack('H', data, 0x09)
@@ -118,6 +128,7 @@ local handle_spawn_despawn = function(data)
     end
 end
 
+-- Event handlers
 ashita.events.register('packet_in', 'packet_in_cb', function (e)
     if (e.blocked) then
         return
@@ -143,10 +154,7 @@ ashita.events.register('packet_in', 'packet_in_cb', function (e)
         local subid = struct.unpack('H', e.data_modified, 0x9F)
         entities = helpers.populate_entity_names(zone, subid)
     end
-
 end)
-
-local target_index = 0
 
 ashita.events.register('packet_out', 'packet_out_cb', function(e)
     if e.id ~= 0x015 then
@@ -156,158 +164,17 @@ ashita.events.register('packet_out', 'packet_out_cb', function(e)
     target_index = struct.unpack('H', e.data_modified, 0x17)
 end)
 
-local gui_flags = bit.bor(ImGuiWindowFlags_NoSavedSettings, ImGuiWindowFlags_NoFocusOnAppearing, ImGuiWindowFlags_NoScrollbar, ImGuiWindowFlags_NoScrollWithMouse)
-local visible = config.ui
-local tod_visible = config.tod
-local selected_color = { 0, 0.75, 0, 1.0 }
-local search_term = { '' }
-local entity_to_add = { '' }
-local show_selected = { false }
-
-local draw_main_window = function()
-    if visible[1] then
-        imgui.SetNextWindowBgAlpha(0.8)
-        imgui.SetNextWindowSizeConstraints({ FLT_MIN, FLT_MIN, }, { 800, 800, })
-        if(imgui.Begin('Pop!', visible, gui_flags)) then
-            if imgui.BeginTabBar("Tracking Types") then
-                if imgui.BeginTabItem("Zone Index List") then
-
-                    imgui.Dummy({0, 1})
-                    imgui.BeginGroup()
-                    imgui.Text('Filter: ')
-                    imgui.SameLine()
-                    imgui.InputText('##search_term', search_term, 256)
-                    imgui.SameLine()
-                    imgui.Checkbox('Selected', show_selected)
-                    imgui.EndGroup()
-                    imgui.Dummy({0, .5})
-                    imgui.SetNextWindowBgAlpha(0)
-
-                    if imgui.BeginChild("Scrollable Index List") then
-                        for _, v in ipairs(entities) do
-
-                            local lower_name = v[5]
-                            local term = search_term[1]
-                            local index = v[1]
-                            local id = v[2]
-                            local tag = v[3]
-                            local name = v[4]
-                            local checked = config.watch.ids[id] or false
-
-                            if (not show_selected[1] or (show_selected[1] and checked)) and 
-                                (term:len() < 1 or string.find(lower_name, term:lower())) then
-
-                                local changed = imgui.Checkbox('##' .. tag, { checked })
-                                if changed then
-                                    config.watch.ids[id] = not checked and true or nil
-                                end
-                                imgui.SameLine()
-                                if index == target_index then
-                                    imgui.TextColored(selected_color, '[' .. index .. '] '.. name .. ' (' .. id .. ')')
-                                else
-                                    imgui.Text('[' .. index .. '] '.. name .. ' (' .. id .. ')')
-                                end
-                            end
-                        end
-                        imgui.EndChild()
-                    end
-                    imgui.EndTabItem()
-                end
-
-                if imgui.BeginTabItem("By Name") then
-
-                    imgui.Dummy({0, 1})
-                    imgui.BeginGroup()
-                    imgui.Text('Add entity: ')
-                    imgui.SameLine()
-                    if imgui.InputText('##entity_to_add', entity_to_add, 17, ImGuiInputTextFlags_EnterReturnsTrue) then
-                        watch_named_entity(entity_to_add[1])
-                    end
-                    imgui.SameLine()
-                    if imgui.Button('+##add-entity') then
-                        watch_named_entity(entity_to_add[1])
-                    end
-                    imgui.EndGroup()
-                    imgui.Dummy({0, 1})
-                    imgui.SetNextWindowBgAlpha(0)
-
-                    if imgui.BeginChild("Scrollable Name List") then
-                        for k,_ in pairs(config.watch.names) do
-                            if imgui.Button('-##remove-' .. k) then
-                                unwatch_named_entity(k)
-                            end
-                            imgui.SameLine()
-                            imgui.Text(k)
-                        end
-                        imgui.EndChild()
-                    end
-
-                    imgui.EndTabItem()
-                end
-
-                imgui.EndTabBar()
-            end
-            imgui.End()
-        end
-    end
-end
-
-local draw_tod_window = function()
-    if tod_visible[1] then
-        local tods = config.tods
-        imgui.SetNextWindowBgAlpha(0.8)
-        imgui.SetNextWindowSizeConstraints({ FLT_MIN, FLT_MIN, }, { 400, 400, })
-        if(imgui.Begin('Recent TODs', tod_visible, gui_flags)) then
-            for k,v in pairs(tods) do
-                local dif = v[3] - os.time()
-                local foramtted = helpers.format_time_difference(dif)
-                if imgui.Button('-##remove-tod-' .. k) then
-                    tods[k] = nil
-                end
-                imgui.SameLine()
-                imgui.Text('[' .. v[1] .. '] '.. v[2] .. ' : ' .. v[4] .. ' |')
-                imgui.SameLine()
-                imgui.TextColored({ 0.75, 0.75, 0, 1.0 }, foramtted)
-            end
-            imgui.End()
-        end
-    end
-end
-
 ashita.events.register('d3d_present', 'present_cb', function ()
-    draw_main_window()
-    draw_tod_window()
+    ui.draw_main_window(visible, config, entities, target_index, watch_named_entity, unwatch_named_entity)
+    ui.draw_tod_window(tod_visible, config)
 end)
 
 ashita.events.register('command', 'command_cb', function (e)
     local args = e.command:args()
-    if (#args == 0 or not args[1]:any('/pop')) then
-        return
+    local handled = commands.handle_command(args, config, visible, tod_visible)
+    if handled then
+        e.blocked = true
     end
-
-    e.blocked = true
-
-    if #args == 1 then
-        visible[1] = not visible[1]
-        return
-    end
-
-    if args[2]:any('tod','t') then
-        tod_visible[1] = not tod_visible[1]
-    end
-
-    if args[2]:any('sound','s') then
-        config.sound = not config.sound
-        local msg = config.sound and chat.success('[ON]') or chat.error('[OFF]')
-        print(chat.header(addon.name) + chat.message('Sound alerts: ') + msg)
-    end
-
-    if args[2]:any('flash','f') then
-        config.flash = not config.flash
-        local msg = config.flash and chat.success('[ON]') or chat.error('[OFF]')
-        print(chat.header(addon.name) + chat.message('Flash taskbar: ') + msg)
-    end
-
 end)
 
 settings.register('settings', 'settings_update', function (s)
@@ -317,4 +184,13 @@ settings.register('settings', 'settings_update', function (s)
     settings.save()
 end)
 
+local mgr = AshitaCore:GetInputManager()
+local kb = mgr:GetKeyboard()
+local xi = mgr:GetXInput()
+
+for k, v in pairs(getmetatable(kb)) do
+    print(k)
+end
+
+-- Initialize entities on load
 entities = helpers.populate_entity_names(AshitaCore:GetMemoryManager():GetParty():GetMemberZone(0), 0)
