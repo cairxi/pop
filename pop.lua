@@ -132,30 +132,30 @@ local handle_spawn_despawn = function(data)
     end
 end
 
+local handle_zone = function(data)
+    local unpack = struct.unpack
+    local zone = unpack('H', data, 0x31)
+    local subid = unpack('H', data, 0x9F)
+    announced = {}
+    dynamic_names = {}
+    entity_states = {}
+    entities = helpers.populate_entity_names(zone, subid)
+end
+
+local pkt_handlers = {
+    [0x0A] = handle_zone,
+    [0x0E] = handle_entity,
+    [0x38] = handle_spawn_despawn,
+}
+
 ashita.events.register('packet_in', 'packet_in_cb', function (e)
     if (e.blocked) then
         return
     end
+    local handler = pkt_handlers[e.id]
 
-    -- Entity update
-    if e.id == 0x0E then
-        handle_entity(e.data)
-        return
-    end
-
-    -- Spawn/Despawn animation
-    if e.id == 0x038 then
-        handle_spawn_despawn(e.data)
-    end
-
-    -- Zone
-    if e.id == 0x0A then
-        announced = {}
-        dynamic_names = {}
-        entity_states = {}
-        local zone = struct.unpack('H', e.data, 0x31)
-        local subid = struct.unpack('H', e.data, 0x9F)
-        entities = helpers.populate_entity_names(zone, subid)
+    if handler then
+        handler(e.data)
     end
 end)
 
