@@ -1,6 +1,6 @@
 addon.name = 'pop'
 addon.author = 'cair'
-addon.version = '1.1'
+addon.version = '1.2'
 
 local settings = require('settings')
 local chat = require('chat')
@@ -28,7 +28,7 @@ local entities = {}
 local announced = {}
 local dynamic_names = {}
 local despawning = {}
-local claim_tracking = {}
+local entity_states = {}
 local target_index = 0
 
 -- UI visibility state
@@ -69,7 +69,6 @@ end
 
 local handle_unrender = function(index, id, name, mask)
     add_tod(index, id, name)
-    claim_tracking[index] = nil
     despawning[index] = nil
     announced[index] = nil
 end
@@ -89,20 +88,19 @@ local handle_entity = function(data)
     local id = unpack('I', data, 0x05)
     local mask = unpack('B', data, 0x0B)
 
-    if announced[index] and despawning[index] then
-        if band(mask, 32) == 32 then
+    if band(mask, 32) == 32 and announced[index] and despawning[index] then
+        local name = fetch_name(index)
+        handle_unrender(index, id, name, mask)
+        return
+    end
+
+    if band(mask, 4) == 4 then
+        local state = unpack('B', data, 0x20)
+        entity_states[index] = state
+        if state == 3 and announced[index] and despawning[index] then
             local name = fetch_name(index)
             handle_unrender(index, id, name, mask)
             return
-        end
-
-        if band(mask, 4) == 4 then
-            local state = unpack('B', data, 0x20)
-            if state == 3 then
-                local name = fetch_name(index)
-                handle_unrender(index, id, name, mask)
-                return
-            end
         end
     end
 
@@ -111,15 +109,12 @@ local handle_entity = function(data)
         dynamic_names[index] = name
     end
 
-    if (not claim_tracking[index] or claim_tracking[index] == 0) then
+    local alive = entity_states[index] and entity_states[index] < 2
+    if alive then
         local name = fetch_name(index)
         if config.watch.ids[id] or config.watch.names[name] then
             handle_notify(index, name)
         end
-    end
-    
-    if band(mask, 2) == 2 then
-        claim_tracking[index] = unpack('I', data, 0x2D)
     end
 end
 
@@ -144,22 +139,21 @@ ashita.events.register('packet_in', 'packet_in_cb', function (e)
 
     -- Entity update
     if e.id == 0x0E then
-        handle_entity(e.data_modified)
+        handle_entity(e.data)
         return
     end
 
     -- Spawn/Despawn animation
     if e.id == 0x038 then
-        handle_spawn_despawn(e.data_modified)
+        handle_spawn_despawn(e.data)
     end
 
     -- Zone
     if e.id == 0x0A then
         announced = {}
-        claim_tracking = {}
         dynamic_names = {}
-        local zone = struct.unpack('H', e.data_modified, 0x31)
-        local subid = struct.unpack('H', e.data_modified, 0x9F)
+        local zone = struct.unpack('H', e.data, 0x31)
+        local subid = struct.unpack('H', e.data, 0x9F)
         entities = helpers.populate_entity_names(zone, subid)
     end
 end)
