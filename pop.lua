@@ -152,6 +152,7 @@ ashita.events.register('packet_in', 'packet_in_cb', function (e)
     if e.id == 0x0A then
         announced = {}
         dynamic_names = {}
+        entity_states = {}
         local zone = struct.unpack('H', e.data, 0x31)
         local subid = struct.unpack('H', e.data, 0x9F)
         entities = helpers.populate_entity_names(zone, subid)
