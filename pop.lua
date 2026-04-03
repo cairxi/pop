@@ -1,6 +1,6 @@
 addon.name = 'pop'
 addon.author = 'cair'
-addon.version = '1.0'
+addon.version = '1.1'
 
 local settings = require('settings')
 local chat = require('chat')
