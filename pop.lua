@@ -67,10 +67,8 @@ local add_tod = function(index, id, name)
     settings.save()
 end
 
-local handle_unrender = function(index, id, name)
-    if announced[index] and despawning[index] then
-        add_tod(index, id, name)
-    end
+local handle_unrender = function(index, id, name, mask)
+    add_tod(index, id, name)
     claim_tracking[index] = nil
     despawning[index] = nil
     announced[index] = nil
@@ -84,7 +82,6 @@ local fetch_name = function(index)
     return dynamic_names[index] or '(Unknown)'
 end
 
--- Packet handlers
 local handle_entity = function(data)
     local unpack = struct.unpack
     local band = bit.band
@@ -92,10 +89,21 @@ local handle_entity = function(data)
     local id = unpack('I', data, 0x05)
     local mask = unpack('B', data, 0x0B)
 
-    if band(mask, 32) == 32 then
-        local name = fetch_name(index)
-        handle_unrender(index, id, name)
-        return
+    if announced[index] and despawning[index] then
+        if band(mask, 32) == 32 then
+            local name = fetch_name(index)
+            handle_unrender(index, id, name, mask)
+            return
+        end
+
+        if band(mask, 4) == 4 then
+            local state = unpack('B', data, 0x20)
+            if state == 3 then
+                local name = fetch_name(index)
+                handle_unrender(index, id, name, mask)
+                return
+            end
+        end
     end
 
     if band(mask, 8) == 8 and index >= 0x700 then
@@ -120,6 +128,7 @@ local handle_spawn_despawn = function(data)
     local index = unpack('H', data, 0x11)
     local id = unpack('I', data, 0x05)
     local kd = unpack('c4', data, 0x0D)
+
     if kd == 'kesu' then
         despawning[index] = true
     elseif kd == 'deru' and config.watch.ids[id] then
@@ -128,7 +137,6 @@ local handle_spawn_despawn = function(data)
     end
 end
 
--- Event handlers
 ashita.events.register('packet_in', 'packet_in_cb', function (e)
     if (e.blocked) then
         return
@@ -184,5 +192,4 @@ settings.register('settings', 'settings_update', function (s)
     settings.save()
 end)
 
--- Initialize entities on load
 entities = helpers.populate_entity_names(AshitaCore:GetMemoryManager():GetParty():GetMemberZone(0), 0)
