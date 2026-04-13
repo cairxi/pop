@@ -95,7 +95,7 @@ local handle_entity = function(data)
     end
 
     if band(mask, 4) == 4 then
-        local state = unpack('B', data, 0x20)
+        local state = unpack('B', data, 0x21)
         entity_states[index] = state
         if state == 3 and announced[index] and despawning[index] then
             local name = fetch_name(index)
